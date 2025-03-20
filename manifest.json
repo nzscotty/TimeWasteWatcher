@@ -1,0 +1,34 @@
+{
+    "manifest_version": 3,
+    "name": "Time Waste Watcher",
+    "version": "1.0",
+    "description": "Reduces time spent on social media by enforcing daily limits.",
+    "permissions": [
+      "storage",
+      "tabs",
+      "scripting",
+      "alarms"
+    ],
+    "background": {
+      "service_worker": "background.js"
+    },
+    "action": {
+      "default_popup": "popup.html",
+      "default_title": "Time Waste Watcher Settings"
+    },
+    "content_scripts": [
+      {
+        "matches": [
+          "*://*.facebook.com/*",
+          "*://*.instagram.com/*",
+          "*://*.x.com/*",
+          "*://*.reddit.com/*",
+          "*://*.youtube.com/*",
+          "*://*.tiktok.com/*",
+          "*://*.snapchat.com/*"
+        ],
+        "js": ["content.js"]
+      }
+    ]
+  }
+  
