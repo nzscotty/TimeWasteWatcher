@@ -4,6 +4,40 @@ const sites = ["facebook.com", "instagram.com", "x.com", "reddit.com", "youtube.
 const DEFAULT_DAILY_LIMIT = 30;
 const DEFAULT_HOURLY_LIMIT = 0;
 
+function getPendingSites(callback) {
+  chrome.storage.local.get(["pendingSiteAdds"], (result) => {
+    callback(result.pendingSiteAdds || []);
+  });
+}
+
+function setPendingSites(pendingSites, callback) {
+  chrome.storage.local.set({ pendingSiteAdds: pendingSites }, callback);
+}
+
+function addPendingSite(site, callback) {
+  getPendingSites((pendingSites) => {
+    const updatedPendingSites = pendingSites.includes(site)
+      ? pendingSites
+      : [...pendingSites, site];
+    setPendingSites(updatedPendingSites, callback);
+  });
+}
+
+function removePendingSite(site, callback) {
+  getPendingSites((pendingSites) => {
+    const updatedPendingSites = pendingSites.filter((pendingSite) => pendingSite !== site);
+    setPendingSites(updatedPendingSites, callback);
+  });
+}
+
+function persistSiteLimit(site, limit, callback) {
+  chrome.storage.local.get(["limits"], (result) => {
+    const limits = result.limits || {};
+    limits[site] = limit;
+    chrome.storage.local.set({ limits }, callback);
+  });
+}
+
 function getOriginPatterns(site) {
   return [
     `http://${site}/*`,
@@ -201,12 +235,16 @@ function addSite() {
   }
 
   const finalizeAdd = () => {
-    appendSiteRow(document.getElementById("limitsTable"), site, {
+    const defaultLimit = {
       daily: DEFAULT_DAILY_LIMIT,
       hourly: DEFAULT_HOURLY_LIMIT,
-    });
+    };
+
+    appendSiteRow(document.getElementById("limitsTable"), site, defaultLimit);
     newSiteInput.value = "";
-    saveLimits();
+    persistSiteLimit(site, defaultLimit, () => {
+      removePendingSite(site);
+    });
   };
 
   if (sites.includes(site)) {
@@ -214,13 +252,17 @@ function addSite() {
     return true;
   }
 
-  chrome.permissions.request({ origins: getOriginPatterns(site) }, (granted) => {
-    if (!granted) {
-      alert("Site permission is required to track that website.");
-      return;
-    }
+  addPendingSite(site, () => {
+    chrome.permissions.request({ origins: getOriginPatterns(site) }, (granted) => {
+      if (!granted) {
+        removePendingSite(site, () => {
+          alert("Site permission is required to track that website.");
+        });
+        return;
+      }
 
-    finalizeAdd();
+      finalizeAdd();
+    });
   });
   return true;
 }

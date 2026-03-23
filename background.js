@@ -9,6 +9,15 @@ const DEFAULT_LIMITS = {
     "snapchat.com": { daily: 30, hourly: 0 },
   };
 
+  function getOriginPatterns(site) {
+    return [
+      `http://${site}/*`,
+      `https://${site}/*`,
+      `http://*.${site}/*`,
+      `https://*.${site}/*`,
+    ];
+  }
+
   function getAllTrackedDomains(storedLimits = {}) {
     return [...new Set([...Object.keys(DEFAULT_LIMITS), ...Object.keys(storedLimits)])];
   }
@@ -142,6 +151,62 @@ const DEFAULT_LIMITS = {
     );
   }
 
+  function setPendingSites(pendingSites, callback) {
+    chrome.storage.local.set({ pendingSiteAdds: pendingSites }, callback);
+  }
+
+  function removePendingSite(site, callback) {
+    chrome.storage.local.get(["pendingSiteAdds"], (result) => {
+      const pendingSites = result.pendingSiteAdds || [];
+      const updatedPendingSites = pendingSites.filter((pendingSite) => pendingSite !== site);
+      setPendingSites(updatedPendingSites, callback);
+    });
+  }
+
+  function persistLimit(site, callback) {
+    chrome.storage.local.get(["limits"], (result) => {
+      const limits = result.limits || {};
+      if (!limits[site]) {
+        limits[site] = DEFAULT_LIMITS[site] || { daily: 30, hourly: 0 };
+      }
+
+      chrome.storage.local.set({ limits }, () => {
+        if (callback) {
+          callback(limits[site]);
+        }
+      });
+    });
+  }
+
+  function ensureTrackedTabsUpdated(domain, siteLimit) {
+    if (!hasActiveLimit(siteLimit)) {
+      return;
+    }
+
+    chrome.tabs.query({}, (tabs) => {
+      tabs.forEach((tab) => {
+        if (!canMessageTab(tab.id, tab.url)) {
+          return;
+        }
+
+        const hostname = getDomain(tab.url);
+        if (hostname !== domain && !hostname?.endsWith(`.${domain}`)) {
+          return;
+        }
+
+        sendTabMessage(tab.id, tab.url, { type: "unblock" }, true);
+      });
+    });
+  }
+
+  function finalizePendingSite(site) {
+    persistLimit(site, (siteLimit) => {
+      removePendingSite(site, () => {
+        ensureTrackedTabsUpdated(site, siteLimit);
+      });
+    });
+  }
+
   function sendTabMessage(tabId, url, message, injectIfMissing = false) {
     if (!canMessageTab(tabId, url)) {
       return;
@@ -163,6 +228,23 @@ const DEFAULT_LIMITS = {
       }
     });
   }
+
+  chrome.permissions.onAdded.addListener((permissions) => {
+    const grantedOrigins = permissions.origins || [];
+
+    chrome.storage.local.get(["pendingSiteAdds"], (result) => {
+      const pendingSites = result.pendingSiteAdds || [];
+
+      pendingSites.forEach((site) => {
+        const siteOrigins = getOriginPatterns(site);
+        const hasRequiredOrigin = siteOrigins.some((origin) => grantedOrigins.includes(origin));
+
+        if (hasRequiredOrigin) {
+          finalizePendingSite(site);
+        }
+      });
+    });
+  });
   
   // load user-defined limits or use defaults
   function getLimits(callback) {
