@@ -1,3 +1,6 @@
+if (!globalThis.__timeWasteWatcherInjected) {
+globalThis.__timeWasteWatcherInjected = true;
+
 // Helper: Extract the domain (e.g. facebook.com) from a URL.
 function getDomain(url) {
     try {
@@ -22,6 +25,9 @@ function findTrackedDomain(hostname, limits) {
 }
 
 function normalizeLimit(limit) {
+  const dailyValue = Number(limit?.daily);
+  const hourlyValue = Number(limit?.hourly);
+
   if (typeof limit === "number") {
     return {
       daily: limit,
@@ -30,8 +36,8 @@ function normalizeLimit(limit) {
   }
 
   return {
-    daily: typeof limit?.daily === "number" ? limit.daily : 0,
-    hourly: typeof limit?.hourly === "number" ? limit.hourly : 0,
+    daily: Number.isFinite(dailyValue) ? dailyValue : 0,
+    hourly: Number.isFinite(hourlyValue) ? hourlyValue : 0,
   };
 }
 
@@ -85,6 +91,20 @@ function formatRemainingTime(seconds) {
   return `${minutes}:${remainingSeconds < 10 ? '0' + remainingSeconds : remainingSeconds}`;
 }
 
+function buildCountdownMarkup(siteLimit, usageEntry) {
+  const lines = [];
+
+  if (siteLimit.daily > 0) {
+    lines.push(`<div>Daily left: ${formatRemainingTime(Math.max(0, siteLimit.daily * 60 - usageEntry.dailySeconds))}</div>`);
+  }
+
+  if (siteLimit.hourly > 0) {
+    lines.push(`<div>Hourly left: ${formatRemainingTime(Math.max(0, siteLimit.hourly * 60 - usageEntry.hourlySeconds))}</div>`);
+  }
+
+  return lines.join("");
+}
+
 function hasActiveLimit(limit) {
   return Boolean(limit) && ((limit.daily || 0) > 0 || (limit.hourly || 0) > 0);
 }
@@ -110,7 +130,7 @@ function hasActiveLimit(limit) {
     countdownOverlay.style.borderRadius = "4px";
     countdownOverlay.style.cursor = "move";
     countdownOverlay.style.zIndex = "10000";
-    countdownOverlay.innerHTML = "<div>Daily left: --:--</div><div>Hourly left: --:--</div>";
+    countdownOverlay.innerHTML = "";
     document.body.appendChild(countdownOverlay);
   
     // Setup dragging
@@ -152,15 +172,7 @@ function hasActiveLimit(limit) {
       }
 
       countdownOverlay.style.display = "block";
-
-      const dailyText = siteLimit.daily > 0
-        ? formatRemainingTime(Math.max(0, siteLimit.daily * 60 - usageEntry.dailySeconds))
-        : "Not set";
-      const hourlyText = siteLimit.hourly > 0
-        ? formatRemainingTime(Math.max(0, siteLimit.hourly * 60 - usageEntry.hourlySeconds))
-        : "Not set";
-
-      countdownOverlay.innerHTML = `<div>Daily left: ${dailyText}</div><div>Hourly left: ${hourlyText}</div>`;
+      countdownOverlay.innerHTML = buildCountdownMarkup(siteLimit, usageEntry);
     });
   }
   
@@ -272,8 +284,10 @@ function hasActiveLimit(limit) {
       clickCount++;
       document.getElementById("clickCountText").innerText = `Clicks: ${clickCount}/10`;
       if (clickCount >= 10) {
-        chrome.runtime.sendMessage({ type: "resetTime", domain }, (response) => {
-          // Optionally handle response.
+        chrome.runtime.sendMessage({ type: "resetTime", domain }, () => {
+          if (chrome.runtime.lastError) {
+            // Ignore cases where the extension context reloads before the response arrives.
+          }
         });
         removeBlockOverlay();
       }
@@ -305,4 +319,6 @@ function hasActiveLimit(limit) {
       createCountdownOverlay();
     }
   })();
+
+}
   

@@ -30,6 +30,9 @@ const DEFAULT_LIMITS = {
   }
 
   function normalizeLimit(limit, fallback) {
+    const dailyValue = Number(limit?.daily);
+    const hourlyValue = Number(limit?.hourly);
+
     if (typeof limit === "number") {
       return {
         daily: limit,
@@ -38,8 +41,8 @@ const DEFAULT_LIMITS = {
     }
 
     return {
-      daily: typeof limit?.daily === "number" ? limit.daily : fallback.daily,
-      hourly: typeof limit?.hourly === "number" ? limit.hourly : fallback.hourly,
+      daily: Number.isFinite(dailyValue) ? dailyValue : fallback.daily,
+      hourly: Number.isFinite(hourlyValue) ? hourlyValue : fallback.hourly,
     };
   }
 
@@ -114,6 +117,52 @@ const DEFAULT_LIMITS = {
       .sort((left, right) => right.length - left.length)
       .find((site) => hostname === site || hostname.endsWith(`.${site}`)) || null;
   }
+
+  function canMessageTab(tabId, url) {
+    return Number.isInteger(tabId)
+      && Boolean(url)
+      && /^https?:\/\//i.test(url);
+  }
+
+  function injectContentScript(tabId, callback) {
+    chrome.scripting.executeScript(
+      {
+        target: { tabId },
+        files: ["content.js"],
+      },
+      () => {
+        if (chrome.runtime.lastError) {
+          // Ignore pages where injection is not allowed or permission is absent.
+        }
+
+        if (callback) {
+          callback();
+        }
+      }
+    );
+  }
+
+  function sendTabMessage(tabId, url, message, injectIfMissing = false) {
+    if (!canMessageTab(tabId, url)) {
+      return;
+    }
+
+    chrome.tabs.sendMessage(tabId, message, () => {
+      if (chrome.runtime.lastError) {
+        if (!injectIfMissing) {
+          return;
+        }
+
+        injectContentScript(tabId, () => {
+          chrome.tabs.sendMessage(tabId, message, () => {
+            if (chrome.runtime.lastError) {
+              // Ignore tabs where the content script is unavailable or not yet loaded.
+            }
+          });
+        });
+      }
+    });
+  }
   
   // load user-defined limits or use defaults
   function getLimits(callback) {
@@ -172,14 +221,15 @@ const DEFAULT_LIMITS = {
         const now = new Date();
         const domain = findTrackedDomain(hostname, limits);
         if (!domain) {
-          chrome.tabs.sendMessage(activeTabId, { type: "unblock" });
+          sendTabMessage(activeTabId, tab.url, { type: "unblock" });
           return;
         }
 
         const siteLimit = limits[domain];
+        const shouldInject = hasActiveLimit(siteLimit);
 
         // if this domain is being tracked
-        if (hasActiveLimit(siteLimit)) {
+        if (shouldInject) {
           const usageEntry = normalizeUsageEntry(domain, now);
           usageEntry.dailySeconds += 1;
           usageEntry.hourlySeconds += 1;
@@ -189,16 +239,16 @@ const DEFAULT_LIMITS = {
           const hourlyExceeded = siteLimit.hourly > 0 && usageEntry.hourlySeconds >= siteLimit.hourly * 60;
 
           if (dailyExceeded || hourlyExceeded) {
-            chrome.tabs.sendMessage(activeTabId, {
+            sendTabMessage(activeTabId, tab.url, {
               type: "block",
               domain,
               limitType: hourlyExceeded ? "hourly" : "daily",
-            });
+            }, true);
             return;
           }
         }
 
-        chrome.tabs.sendMessage(activeTabId, { type: "unblock" });
+        sendTabMessage(activeTabId, tab.url, { type: "unblock" }, shouldInject);
       });
     });
   }, 1000);
@@ -216,7 +266,7 @@ const DEFAULT_LIMITS = {
       saveUsage();
       // Remove the block overlay from the tab that sent the message
       if (sender.tab && sender.tab.id) {
-        chrome.tabs.sendMessage(sender.tab.id, { type: "unblock" });
+        sendTabMessage(sender.tab.id, sender.tab.url, { type: "unblock" });
       }
       sendResponse({ status: "ok" });
     }

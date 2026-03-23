@@ -6,23 +6,45 @@
     "permissions": [
       "storage",
       "tabs",
-      "scripting",
-      "alarms"
+      "scripting"
+    ],
+    "host_permissions": [
+      "*://facebook.com/*",
+      "*://*.facebook.com/*",
+      "*://instagram.com/*",
+      "*://*.instagram.com/*",
+      "*://x.com/*",
+      "*://*.x.com/*",
+      "*://reddit.com/*",
+      "*://*.reddit.com/*",
+      "*://youtube.com/*",
+      "*://*.youtube.com/*",
+      "*://tiktok.com/*",
+      "*://*.tiktok.com/*",
+      "*://snapchat.com/*",
+      "*://*.snapchat.com/*"
+    ],
+    "optional_host_permissions": [
+      "http://*/*",
+      "https://*/*"
     ],
     "background": {
       "service_worker": "background.js"
     },
+    "icons": {
+      "16": "favicon.png",
+      "32": "favicon.png",
+      "48": "favicon.png",
+      "128": "favicon.png"
+    },
     "action": {
       "default_popup": "popup.html",
-      "default_title": "Time Waste Watcher Settings"
-    },
-    "content_scripts": [
-      {
-        "matches": [
-          "<all_urls>"
-        ],
-        "js": ["content.js"]
+      "default_title": "Time Waste Watcher Settings",
+      "default_icon": {
+        "16": "favicon.png",
+        "32": "favicon.png",
+        "48": "favicon.png"
       }
-    ]
+    }
   }
   

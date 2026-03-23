@@ -1,36 +1,345 @@
 <!DOCTYPE html>
-<html>
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Time Waste Watcher Settings</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <style>
-    body { font-family: sans-serif; padding: 20px; }
-    .add-site-controls { display: flex; gap: 8px; margin-bottom: 12px; }
-    .add-site-controls input[type="text"] { flex: 1; padding: 4px 6px; }
-    table { width: 100%; }
-    td { padding: 5px; }
-    input[type="number"] { width: 60px; }
-    .remove-site-btn { padding: 4px 8px; }
-    button { margin-top: 10px; padding: 5px 10px; }
+    :root {
+      --popup-width: 430px;
+      --surface: rgba(15, 23, 42, 0.96);
+      --surface-alt: rgba(30, 41, 59, 0.9);
+      --surface-border: rgba(148, 163, 184, 0.14);
+    }
+
+    html,
+    body {
+      width: var(--popup-width);
+      min-width: var(--popup-width);
+      max-width: var(--popup-width);
+      margin: 0;
+      background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+      font-size: 13px;
+      overflow-x: hidden;
+      color: #e5e7eb;
+      font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    main.container {
+      padding: 0.4rem;
+    }
+
+    .hero,
+    .panel {
+      border: 1px solid var(--surface-border);
+      background: var(--surface);
+      box-shadow: 0 8px 24px rgba(2, 6, 23, 0.2);
+    }
+
+    .hero {
+      margin-bottom: 0.35rem;
+      padding: 0.5rem 0.65rem;
+      border-radius: 12px;
+    }
+
+    .hero-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.35rem;
+      margin-bottom: 0;
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: 0.98rem;
+      letter-spacing: -0.02em;
+    }
+
+    .hero p {
+      margin: 0;
+      color: #cbd5e1;
+      font-size: 0.72rem;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .hero-badge {
+      padding: 0.16rem 0.38rem;
+      background: rgba(56, 189, 248, 0.12);
+      color: #7dd3fc;
+      font-size: 0.58rem;
+    }
+
+    .panel {
+      border-radius: 12px;
+      padding: 0.5rem 0.65rem;
+      margin-bottom: 0.35rem;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.45rem;
+      margin-bottom: 0.3rem;
+    }
+
+    .panel-header h2 {
+      margin: 0;
+      font-size: 0.8rem;
+    }
+
+    .panel-header p {
+      margin: 0;
+      font-size: 0.68rem;
+      color: #94a3b8;
+    }
+
+    .add-site-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+      align-items: center;
+      margin: 0;
+    }
+
+    .add-site-controls input,
+    .limits-table input {
+      margin: 0;
+      height: 1.95rem;
+      padding: 0.28rem 0.5rem;
+      border-radius: 9px;
+      border-color: rgba(148, 163, 184, 0.2);
+      background: var(--surface-alt);
+      font-size: 0.78rem;
+      color: #e5e7eb;
+      outline: none;
+    }
+
+    .add-site-controls input:focus,
+    .limits-table input:focus {
+      border-color: rgba(56, 189, 248, 0.45);
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.12);
+    }
+
+    button {
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      background: linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%);
+      color: white;
+      cursor: pointer;
+    }
+
+    button:hover,
+    button:focus-visible {
+      filter: brightness(1.05);
+    }
+
+    .remove-site-btn {
+      margin: 0;
+      height: 1.95rem;
+      padding: 0.28rem 0.62rem;
+      border-radius: 9px;
+      font-size: 0.72rem;
+    }
+
+    .limits-table {
+      width: 100%;
+      margin: 0;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    .limits-table thead th {
+      padding: 0 0.2rem 0.22rem;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+      color: #94a3b8;
+      font-size: 0.58rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      text-align: left;
+    }
+
+    .limits-table tbody td {
+      padding: 0.28rem 0.2rem;
+      vertical-align: middle;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+    }
+
+    .site-cell {
+      padding-right: 0.35rem;
+    }
+
+    .site-content {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      min-width: 0;
+    }
+
+    .site-name {
+      display: block;
+      font-weight: 600;
+      color: #e2e8f0;
+      font-size: 0.78rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    .number-input {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .muted-note {
+      margin: 0;
+      color: #94a3b8;
+      font-size: 0.66rem;
+    }
+
+    .empty-actions {
+      display: inline-block;
+      width: 100%;
+      min-height: 2rem;
+    }
+
+    .action-cell {
+      text-align: right;
+    }
+
+    .remove-site-btn {
+      width: 1.2rem;
+      min-width: 1.2rem;
+      height: 1.2rem;
+      padding: 0;
+      border: none;
+      border-radius: 999px;
+      background: transparent;
+      color: #f87171;
+      font-size: 0.85rem;
+      font-weight: 700;
+      line-height: 1;
+      box-shadow: none;
+    }
+
+    .remove-site-btn:hover,
+    .remove-site-btn:focus-visible {
+      background: rgba(239, 68, 68, 0.12);
+      color: #fca5a5;
+      box-shadow: none;
+    }
+
+    #newSiteInput::placeholder {
+      font-size: 0.72rem;
+    }
+
+    .compact-copy {
+      display: flex;
+      align-items: baseline;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+
+    .compact-copy p {
+      margin: 0;
+    }
+
+    .table-wrapper {
+      overflow-x: hidden;
+    }
+
+    #limitsTable th:first-child,
+    #limitsTable td:first-child {
+      width: 46%;
+    }
+
+    #limitsTable th:nth-child(2),
+    #limitsTable td:nth-child(2),
+    #limitsTable th:nth-child(3),
+    #limitsTable td:nth-child(3) {
+      width: 22%;
+    }
+
+    #limitsTable th:last-child,
+    #limitsTable td:last-child {
+      width: 10%;
+      text-align: right;
+    }
+
   </style>
 </head>
 <body>
-  <h1>Time Limits</h1>
-  <p>Set a limit to <strong>0</strong> to disable it.</p>
-  <div class="add-site-controls">
-    <input id="newSiteInput" type="text" placeholder="Add website (example.com or https://example.com)">
-    <button id="addSiteBtn" type="button">Add Website</button>
-  </div>
-  <table id="limitsTable">
-    <tr>
-      <th>Site</th>
-      <th>Daily Limit (minutes)</th>
-      <th>Hourly Limit (minutes)</th>
-      <th></th>
-    </tr>
-    <!-- Rows will be inserted dynamically -->
-  </table>
+  <main class="container">
+    <section class="hero">
+      <div class="hero-top">
+        <div class="compact-copy">
+          <h1>Time Limits</h1>
+          <p>Daily + hourly.</p>
+        </div>
+        <span class="hero-badge">Auto-save</span>
+      </div>
+      <p class="muted-note">0 disables a limit.</p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div class="compact-copy">
+          <h2>Tracked websites</h2>
+          <p>Defaults stay pinned.</p>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table id="limitsTable" class="limits-table">
+          <thead>
+            <tr>
+              <th>Site</th>
+              <th>Daily</th>
+              <th>Hourly</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Rows will be inserted dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div class="compact-copy">
+          <h2>Add website</h2>
+          <p>Add any hostname.</p>
+        </div>
+      </div>
+      <div class="add-site-controls">
+        <input id="newSiteInput" type="text" placeholder="example.com" aria-label="Website hostname">
+      </div>
+    </section>
+    
+  </main>
   <script src="popup.js"></script>
 </body>
 </html>

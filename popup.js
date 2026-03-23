@@ -4,7 +4,14 @@ const sites = ["facebook.com", "instagram.com", "x.com", "reddit.com", "youtube.
 const DEFAULT_DAILY_LIMIT = 30;
 const DEFAULT_HOURLY_LIMIT = 0;
 
+function getOriginPatterns(site) {
+  return [`*://${site}/*`, `*://*.${site}/*`];
+}
+
 function normalizeLimit(limit) {
+  const dailyValue = Number(limit?.daily);
+  const hourlyValue = Number(limit?.hourly);
+
   if (typeof limit === "number") {
     return {
       daily: limit,
@@ -13,8 +20,8 @@ function normalizeLimit(limit) {
   }
 
   return {
-    daily: typeof limit?.daily === "number" ? limit.daily : DEFAULT_DAILY_LIMIT,
-    hourly: typeof limit?.hourly === "number" ? limit.hourly : DEFAULT_HOURLY_LIMIT,
+    daily: Number.isFinite(dailyValue) ? dailyValue : DEFAULT_DAILY_LIMIT,
+    hourly: Number.isFinite(hourlyValue) ? hourlyValue : DEFAULT_HOURLY_LIMIT,
   };
 }
 
@@ -83,23 +90,35 @@ function saveLimits() {
 
 function createRemoveButton(site) {
   const actionCell = document.createElement("td");
+  actionCell.className = "action-cell";
 
   if (!sites.includes(site)) {
     const removeButton = document.createElement("button");
     removeButton.type = "button";
     removeButton.className = "remove-site-btn";
-    removeButton.innerText = "Remove";
+    removeButton.innerHTML = "&times;";
+    removeButton.setAttribute("aria-label", `Remove ${site}`);
+    removeButton.title = `Remove ${site}`;
     removeButton.addEventListener("click", () => {
       document.querySelector(`tr[data-site="${site}"]`)?.remove();
-      saveLimits();
+      chrome.permissions.remove({ origins: getOriginPatterns(site) }, () => {
+        saveLimits();
+      });
     });
     actionCell.appendChild(removeButton);
+  } else {
+    const spacer = document.createElement("span");
+    spacer.className = "empty-actions";
+    spacer.setAttribute("aria-hidden", "true");
+    actionCell.appendChild(spacer);
   }
 
   return actionCell;
 }
 
 function appendSiteRow(table, site, limit) {
+  const tableBody = table.tBodies[0] || table;
+
   if (document.querySelector(`tr[data-site="${site}"]`)) {
     return;
   }
@@ -109,7 +128,17 @@ function appendSiteRow(table, site, limit) {
   row.dataset.site = site;
 
   const siteCell = document.createElement("td");
-  siteCell.innerText = site;
+  siteCell.className = "site-cell";
+
+  const siteContent = document.createElement("div");
+  siteContent.className = "site-content";
+
+  const siteName = document.createElement("span");
+  siteName.className = "site-name";
+  siteName.innerText = site;
+  siteContent.appendChild(siteName);
+
+  siteCell.appendChild(siteContent);
   row.appendChild(siteCell);
 
   const inputCell = document.createElement("td");
@@ -118,6 +147,9 @@ function appendSiteRow(table, site, limit) {
   dailyInput.min = "0";
   dailyInput.value = siteLimits.daily;
   dailyInput.id = `daily-limit-${site}`;
+  dailyInput.className = "number-input";
+  dailyInput.placeholder = "0";
+  dailyInput.setAttribute("aria-label", `Daily limit for ${site} in minutes`);
   dailyInput.addEventListener("blur", saveLimits);
   inputCell.appendChild(dailyInput);
   row.appendChild(inputCell);
@@ -128,12 +160,15 @@ function appendSiteRow(table, site, limit) {
   hourlyInput.min = "0";
   hourlyInput.value = siteLimits.hourly;
   hourlyInput.id = `hourly-limit-${site}`;
+  hourlyInput.className = "number-input";
+  hourlyInput.placeholder = "0";
+  hourlyInput.setAttribute("aria-label", `Hourly limit for ${site} in minutes`);
   hourlyInput.addEventListener("blur", saveLimits);
   hourlyInputCell.appendChild(hourlyInput);
   row.appendChild(hourlyInputCell);
 
   row.appendChild(createRemoveButton(site));
-  table.appendChild(row);
+  tableBody.appendChild(row);
 }
 
 // Load stored limits or default values
@@ -146,26 +181,48 @@ chrome.storage.local.get(["limits"], (result) => {
   });
 });
 
-document.getElementById("addSiteBtn").addEventListener("click", () => {
+function addSite() {
   const newSiteInput = document.getElementById("newSiteInput");
   const site = normalizeSiteInput(newSiteInput.value);
 
   if (!site) {
     alert("Enter a valid website domain.");
-    return;
+    return false;
   }
 
-  appendSiteRow(document.getElementById("limitsTable"), site, {
-    daily: DEFAULT_DAILY_LIMIT,
-    hourly: DEFAULT_HOURLY_LIMIT,
+  if (document.querySelector(`tr[data-site="${site}"]`)) {
+    newSiteInput.value = "";
+    return true;
+  }
+
+  const finalizeAdd = () => {
+    appendSiteRow(document.getElementById("limitsTable"), site, {
+      daily: DEFAULT_DAILY_LIMIT,
+      hourly: DEFAULT_HOURLY_LIMIT,
+    });
+    newSiteInput.value = "";
+    saveLimits();
+  };
+
+  if (sites.includes(site)) {
+    finalizeAdd();
+    return true;
+  }
+
+  chrome.permissions.request({ origins: getOriginPatterns(site) }, (granted) => {
+    if (!granted) {
+      alert("Site permission is required to track that website.");
+      return;
+    }
+
+    finalizeAdd();
   });
-  newSiteInput.value = "";
-  saveLimits();
-});
+  return true;
+}
 
 document.getElementById("newSiteInput").addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     event.preventDefault();
-    document.getElementById("addSiteBtn").click();
+    addSite();
   }
 });
