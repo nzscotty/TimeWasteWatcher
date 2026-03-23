@@ -1,6 +1,20 @@
 if (!globalThis.__timeWasteWatcherInjected) {
 globalThis.__timeWasteWatcherInjected = true;
 
+const DEFAULT_LIMITS = {
+  "facebook.com": { daily: 30, hourly: 0 },
+  "instagram.com": { daily: 30, hourly: 0 },
+  "x.com": { daily: 30, hourly: 0 },
+  "reddit.com": { daily: 30, hourly: 0 },
+  "youtube.com": { daily: 30, hourly: 0 },
+  "tiktok.com": { daily: 30, hourly: 0 },
+  "snapchat.com": { daily: 30, hourly: 0 },
+};
+
+function getAllTrackedDomains(storedLimits = {}) {
+  return [...new Set([...Object.keys(DEFAULT_LIMITS), ...Object.keys(storedLimits)])];
+}
+
 // Helper: Extract the domain (e.g. facebook.com) from a URL.
 function getDomain(url) {
     try {
@@ -22,6 +36,16 @@ function findTrackedDomain(hostname, limits) {
   return Object.keys(limits)
     .sort((left, right) => right.length - left.length)
     .find((site) => hostname === site || hostname.endsWith(`.${site}`)) || null;
+}
+
+function getNormalizedLimits(storedLimits = {}) {
+  const normalizedLimits = {};
+
+  getAllTrackedDomains(storedLimits).forEach((domain) => {
+    normalizedLimits[domain] = normalizeLimit(storedLimits[domain] || DEFAULT_LIMITS[domain]);
+  });
+
+  return normalizedLimits;
 }
 
 function normalizeLimit(limit) {
@@ -155,7 +179,7 @@ function hasActiveLimit(limit) {
     
     chrome.storage.local.get(["usageData", "limits"], (result) => {
       let usageData = result.usageData || {};
-      let limits = result.limits || {};
+      let limits = getNormalizedLimits(result.limits || {});
       const domain = findTrackedDomain(hostname, limits);
       if (!domain) {
         countdownOverlay.style.display = "none";
@@ -250,12 +274,98 @@ function hasActiveLimit(limit) {
   // --- Block Overlay (existing functionality) ---
   
   let blockOverlay = null;
-  let clickCount = 0;
+  let nextExpectedNumber = 1;
+
+  function shuffleNumbers(numbers) {
+    const shuffledNumbers = [...numbers];
+
+    for (let index = shuffledNumbers.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [shuffledNumbers[index], shuffledNumbers[swapIndex]] = [shuffledNumbers[swapIndex], shuffledNumbers[index]];
+    }
+
+    return shuffledNumbers;
+  }
+
+  function updateSequenceStatus() {
+    const statusText = document.getElementById("sequenceStatusText");
+    if (!statusText) {
+      return;
+    }
+
+    statusText.innerText = nextExpectedNumber > 10
+      ? "Sequence complete"
+      : `Next: ${nextExpectedNumber}`;
+  }
+
+  function resetSequenceButtons() {
+    nextExpectedNumber = 1;
+    updateSequenceStatus();
+
+    document.querySelectorAll(".sequence-button").forEach((button) => {
+      button.disabled = false;
+      button.style.opacity = "1";
+      button.style.cursor = "pointer";
+    });
+  }
+
+  function handleSequenceClick(button, value, domain) {
+    if (value !== nextExpectedNumber) {
+      resetSequenceButtons();
+      return;
+    }
+
+    button.disabled = true;
+    button.style.opacity = "0.4";
+    button.style.cursor = "default";
+    nextExpectedNumber += 1;
+    updateSequenceStatus();
+
+    if (nextExpectedNumber > 10) {
+      chrome.runtime.sendMessage({ type: "resetTime", domain }, () => {
+        if (chrome.runtime.lastError) {
+          // Ignore cases where the extension context reloads before the response arrives.
+        }
+      });
+      removeBlockOverlay();
+    }
+  }
+
+  function createSequenceGrid(domain) {
+    const grid = document.createElement("div");
+    grid.style.display = "grid";
+    grid.style.gridTemplateColumns = "repeat(5, minmax(0, 56px))";
+    grid.style.gap = "10px";
+    grid.style.justifyContent = "center";
+    grid.style.margin = "18px 0 14px";
+
+    shuffleNumbers([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).forEach((value) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "sequence-button";
+      button.innerText = String(value);
+      button.style.width = "56px";
+      button.style.height = "56px";
+      button.style.border = "none";
+      button.style.borderRadius = "14px";
+      button.style.background = "linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%)";
+      button.style.color = "white";
+      button.style.fontSize = "20px";
+      button.style.fontWeight = "700";
+      button.style.cursor = "pointer";
+      button.style.boxShadow = "0 8px 18px rgba(37, 99, 235, 0.25)";
+      button.addEventListener("click", () => handleSequenceClick(button, value, domain));
+      grid.appendChild(button);
+    });
+
+    return grid;
+  }
   
   function createBlockOverlay(domain, limitType) {
     if (blockOverlay) return;
 
     const limitLabel = limitType === "hourly" ? "hourly" : "daily";
+    nextExpectedNumber = 1;
   
     blockOverlay = document.createElement("div");
     blockOverlay.style.position = "fixed";
@@ -272,33 +382,41 @@ function hasActiveLimit(limit) {
     blockOverlay.style.alignItems = "center";
     blockOverlay.style.fontSize = "20px";
     blockOverlay.style.textAlign = "center";
-    blockOverlay.innerHTML = `<div style="padding:20px;">
-        <p>You have reached your ${limitLabel} limit on ${domain}.</p>
-        <p>Click the button below 10 times in a row to reset the timer.</p>
-        <button id="resetButton" style="font-size: 18px; padding: 10px 20px;">Reset Timer</button>
-        <p id="clickCountText">Clicks: 0/10</p>
-      </div>`;
+    const panel = document.createElement("div");
+    panel.style.padding = "24px";
+    panel.style.maxWidth = "420px";
+
+    const heading = document.createElement("p");
+    heading.innerHTML = `You have reached your ${limitLabel} limit on ${domain}. <br> To continue browsing, please complete the sequence below.`;
+    heading.style.margin = "0 0 10px";
+
+    const instructions = document.createElement("p");
+    instructions.innerText = "Click the numbers from 1 to 10 in order. A wrong click resets the sequence.";
+    instructions.style.margin = "0";
+    instructions.style.fontSize = "16px";
+    instructions.style.lineHeight = "1.45";
+
+    const statusText = document.createElement("p");
+    statusText.id = "sequenceStatusText";
+    statusText.style.margin = "14px 0 0";
+    statusText.style.fontSize = "16px";
+    statusText.style.fontWeight = "700";
+
+    panel.appendChild(heading);
+    panel.appendChild(instructions);
+    panel.appendChild(createSequenceGrid(domain));
+    panel.appendChild(statusText);
+    blockOverlay.appendChild(panel);
     document.body.appendChild(blockOverlay);
-  
-    document.getElementById("resetButton").addEventListener("click", () => {
-      clickCount++;
-      document.getElementById("clickCountText").innerText = `Clicks: ${clickCount}/10`;
-      if (clickCount >= 10) {
-        chrome.runtime.sendMessage({ type: "resetTime", domain }, () => {
-          if (chrome.runtime.lastError) {
-            // Ignore cases where the extension context reloads before the response arrives.
-          }
-        });
-        removeBlockOverlay();
-      }
-    });
+
+    updateSequenceStatus();
   }
   
   function removeBlockOverlay() {
     if (blockOverlay) {
       blockOverlay.remove();
       blockOverlay = null;
-      clickCount = 0;
+      nextExpectedNumber = 1;
     }
   }
   

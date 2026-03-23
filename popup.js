@@ -5,7 +5,12 @@ const DEFAULT_DAILY_LIMIT = 30;
 const DEFAULT_HOURLY_LIMIT = 0;
 
 function getOriginPatterns(site) {
-  return [`*://${site}/*`, `*://*.${site}/*`];
+  return [
+    `http://${site}/*`,
+    `https://${site}/*`,
+    `http://*.${site}/*`,
+    `https://*.${site}/*`,
+  ];
 }
 
 function normalizeLimit(limit) {
