@@ -306,6 +306,10 @@ function hasActiveLimit(limit) {
       button.disabled = false;
       button.style.opacity = "1";
       button.style.cursor = "pointer";
+      button.style.background = "linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%)";
+      button.style.borderColor = "rgba(56, 189, 248, 0.25)";
+      button.style.color = "#ffffff";
+      button.style.transform = "scale(1)";
     });
   }
 
@@ -318,6 +322,9 @@ function hasActiveLimit(limit) {
     button.disabled = true;
     button.style.opacity = "0.4";
     button.style.cursor = "default";
+    button.style.background = "rgba(30, 41, 59, 0.9)";
+    button.style.borderColor = "rgba(148, 163, 184, 0.14)";
+    button.style.color = "#94a3b8";
     nextExpectedNumber += 1;
     updateSequenceStatus();
 
@@ -337,7 +344,7 @@ function hasActiveLimit(limit) {
     grid.style.gridTemplateColumns = "repeat(5, minmax(0, 56px))";
     grid.style.gap = "10px";
     grid.style.justifyContent = "center";
-    grid.style.margin = "18px 0 14px";
+    grid.style.margin = "16px 0 12px";
 
     shuffleNumbers([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).forEach((value) => {
       const button = document.createElement("button");
@@ -346,14 +353,27 @@ function hasActiveLimit(limit) {
       button.innerText = String(value);
       button.style.width = "56px";
       button.style.height = "56px";
-      button.style.border = "none";
+      button.style.border = "1px solid rgba(56, 189, 248, 0.25)";
       button.style.borderRadius = "14px";
-      button.style.background = "linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%)";
-      button.style.color = "white";
-      button.style.fontSize = "20px";
+      button.style.background = "linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%)";
+      button.style.color = "#ffffff";
+      button.style.fontSize = "18px";
       button.style.fontWeight = "700";
       button.style.cursor = "pointer";
-      button.style.boxShadow = "0 8px 18px rgba(37, 99, 235, 0.25)";
+      button.style.boxShadow = "0 8px 24px rgba(2, 6, 23, 0.2)";
+      button.style.transition = "transform 120ms ease, filter 120ms ease, background 120ms ease";
+      button.addEventListener("mouseenter", () => {
+        if (!button.disabled) {
+          button.style.filter = "brightness(1.05)";
+          button.style.transform = "translateY(-1px)";
+        }
+      });
+      button.addEventListener("mouseleave", () => {
+        if (!button.disabled) {
+          button.style.filter = "brightness(1)";
+          button.style.transform = "translateY(0)";
+        }
+      });
       button.addEventListener("click", () => handleSequenceClick(button, value, domain));
       grid.appendChild(button);
     });
@@ -373,35 +393,64 @@ function hasActiveLimit(limit) {
     blockOverlay.style.left = "0";
     blockOverlay.style.width = "100%";
     blockOverlay.style.height = "100%";
-    blockOverlay.style.backgroundColor = "rgba(0,0,0,0.8)";
+    blockOverlay.style.background = "rgba(2, 6, 23, 0.74)";
+    blockOverlay.style.backdropFilter = "blur(12px)";
+    blockOverlay.style.webkitBackdropFilter = "blur(12px)";
     blockOverlay.style.zIndex = "9999";
-    blockOverlay.style.color = "white";
+    blockOverlay.style.color = "#e5e7eb";
     blockOverlay.style.display = "flex";
     blockOverlay.style.flexDirection = "column";
     blockOverlay.style.justifyContent = "center";
     blockOverlay.style.alignItems = "center";
-    blockOverlay.style.fontSize = "20px";
+    blockOverlay.style.fontSize = "16px";
     blockOverlay.style.textAlign = "center";
+    blockOverlay.style.fontFamily = 'Inter, "Segoe UI", Roboto, Arial, sans-serif';
     const panel = document.createElement("div");
-    panel.style.padding = "24px";
-    panel.style.maxWidth = "420px";
+    panel.style.width = "min(430px, calc(100vw - 24px))";
+    panel.style.padding = "20px 22px";
+    panel.style.maxWidth = "430px";
+    panel.style.borderRadius = "12px";
+    panel.style.border = "1px solid rgba(148, 163, 184, 0.14)";
+    panel.style.background = "rgba(15, 23, 42, 0.96)";
+    panel.style.boxShadow = "0 8px 24px rgba(2, 6, 23, 0.2)";
+
+    const badge = document.createElement("span");
+    badge.innerText = limitLabel === "hourly" ? "Hourly limit" : "Daily limit";
+    badge.style.display = "inline-flex";
+    badge.style.alignItems = "center";
+    badge.style.justifyContent = "center";
+    badge.style.padding = "0.16rem 0.38rem";
+    badge.style.marginBottom = "10px";
+    badge.style.borderRadius = "999px";
+    badge.style.background = "rgba(56, 189, 248, 0.12)";
+    badge.style.color = "#7dd3fc";
+    badge.style.fontSize = "11px";
+    badge.style.fontWeight = "700";
+    badge.style.letterSpacing = "0.08em";
+    badge.style.textTransform = "uppercase";
 
     const heading = document.createElement("p");
-    heading.innerHTML = `You have reached your ${limitLabel} limit on ${domain}. <br> To continue browsing, please complete the sequence below.`;
-    heading.style.margin = "0 0 10px";
+    heading.innerText = `You have reached your ${limitLabel} limit on ${domain}.`;
+    heading.style.margin = "0 0 4px";
+    heading.style.fontSize = "16px";
+    heading.style.fontWeight = "700";
+    heading.style.color = "#e2e8f0";
 
     const instructions = document.createElement("p");
-    instructions.innerText = "Click the numbers from 1 to 10 in order. A wrong click resets the sequence.";
+    instructions.innerText = "Complete 1 to 10 in order. A wrong click resets the sequence.";
     instructions.style.margin = "0";
-    instructions.style.fontSize = "16px";
+    instructions.style.fontSize = "13px";
     instructions.style.lineHeight = "1.45";
+    instructions.style.color = "#94a3b8";
 
     const statusText = document.createElement("p");
     statusText.id = "sequenceStatusText";
-    statusText.style.margin = "14px 0 0";
-    statusText.style.fontSize = "16px";
+    statusText.style.margin = "6px 0 0";
+    statusText.style.fontSize = "13px";
     statusText.style.fontWeight = "700";
+    statusText.style.color = "#7dd3fc";
 
+    panel.appendChild(badge);
     panel.appendChild(heading);
     panel.appendChild(instructions);
     panel.appendChild(createSequenceGrid(domain));
