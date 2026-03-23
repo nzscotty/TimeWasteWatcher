@@ -2,15 +2,92 @@
 function getDomain(url) {
     try {
       let hostname = new URL(url).hostname;
-      let parts = hostname.split('.');
-      if (parts.length > 2) {
-        hostname = parts.slice(parts.length - 2).join('.');
+      if (hostname.startsWith("www.")) {
+        hostname = hostname.slice(4);
       }
       return hostname;
     } catch (e) {
       return null;
     }
   }
+
+function findTrackedDomain(hostname, limits) {
+  if (!hostname) {
+    return null;
+  }
+
+  return Object.keys(limits)
+    .sort((left, right) => right.length - left.length)
+    .find((site) => hostname === site || hostname.endsWith(`.${site}`)) || null;
+}
+
+function normalizeLimit(limit) {
+  if (typeof limit === "number") {
+    return {
+      daily: limit,
+      hourly: 0,
+    };
+  }
+
+  return {
+    daily: typeof limit?.daily === "number" ? limit.daily : 0,
+    hourly: typeof limit?.hourly === "number" ? limit.hourly : 0,
+  };
+}
+
+function getDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getHourKey(date = new Date()) {
+  return `${getDateKey(date)}-${String(date.getHours()).padStart(2, "0")}`;
+}
+
+function normalizeUsageEntry(entry, now = new Date()) {
+  const dateKey = getDateKey(now);
+  const hourKey = getHourKey(now);
+
+  if (typeof entry === "number") {
+    return {
+      dateKey,
+      dailySeconds: entry,
+      hourKey,
+      hourlySeconds: 0,
+    };
+  }
+
+  const normalizedEntry = {
+    dateKey: entry?.dateKey || dateKey,
+    dailySeconds: entry?.dailySeconds || 0,
+    hourKey: entry?.hourKey || hourKey,
+    hourlySeconds: entry?.hourlySeconds || 0,
+  };
+
+  if (normalizedEntry.dateKey !== dateKey) {
+    normalizedEntry.dateKey = dateKey;
+    normalizedEntry.dailySeconds = 0;
+  }
+
+  if (normalizedEntry.hourKey !== hourKey) {
+    normalizedEntry.hourKey = hourKey;
+    normalizedEntry.hourlySeconds = 0;
+  }
+
+  return normalizedEntry;
+}
+
+function formatRemainingTime(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}:${remainingSeconds < 10 ? '0' + remainingSeconds : remainingSeconds}`;
+}
+
+function hasActiveLimit(limit) {
+  return Boolean(limit) && ((limit.daily || 0) > 0 || (limit.hourly || 0) > 0);
+}
   
   // --- Countdown Timer Overlay ---
   
@@ -33,7 +110,7 @@ function getDomain(url) {
     countdownOverlay.style.borderRadius = "4px";
     countdownOverlay.style.cursor = "move";
     countdownOverlay.style.zIndex = "10000";
-    countdownOverlay.innerText = "Time left: --:--";
+    countdownOverlay.innerHTML = "<div>Daily left: --:--</div><div>Hourly left: --:--</div>";
     document.body.appendChild(countdownOverlay);
   
     // Setup dragging
@@ -53,23 +130,37 @@ function getDomain(url) {
   
   // Update the countdown timer text based on stored usage and limits
   function updateCountdown() {
-    const domain = getDomain(window.location.href);
-    if (!domain) return;
+    const hostname = getDomain(window.location.href);
+    if (!hostname) return;
     
     chrome.storage.local.get(["usageData", "limits"], (result) => {
       let usageData = result.usageData || {};
       let limits = result.limits || {};
-      // Only show timer if the current site is being tracked
-      if (!limits[domain]) {
-        countdownOverlay.innerText = "";
+      const domain = findTrackedDomain(hostname, limits);
+      if (!domain) {
+        countdownOverlay.style.display = "none";
         return;
       }
-      const limitSeconds = limits[domain] * 60;
-      const used = usageData[domain] || 0;
-      const remaining = Math.max(0, limitSeconds - used);
-      const minutes = Math.floor(remaining / 60);
-      const seconds = remaining % 60;
-      countdownOverlay.innerText = `Time left: ${minutes}:${seconds < 10 ? '0' + seconds : seconds}`;
+
+      const siteLimit = normalizeLimit(limits[domain]);
+      const usageEntry = normalizeUsageEntry(usageData[domain]);
+
+      // Only show timer if the current site is being tracked
+      if (siteLimit.daily <= 0 && siteLimit.hourly <= 0) {
+        countdownOverlay.style.display = "none";
+        return;
+      }
+
+      countdownOverlay.style.display = "block";
+
+      const dailyText = siteLimit.daily > 0
+        ? formatRemainingTime(Math.max(0, siteLimit.daily * 60 - usageEntry.dailySeconds))
+        : "Not set";
+      const hourlyText = siteLimit.hourly > 0
+        ? formatRemainingTime(Math.max(0, siteLimit.hourly * 60 - usageEntry.hourlySeconds))
+        : "Not set";
+
+      countdownOverlay.innerHTML = `<div>Daily left: ${dailyText}</div><div>Hourly left: ${hourlyText}</div>`;
     });
   }
   
@@ -149,8 +240,10 @@ function getDomain(url) {
   let blockOverlay = null;
   let clickCount = 0;
   
-  function createBlockOverlay(domain) {
+  function createBlockOverlay(domain, limitType) {
     if (blockOverlay) return;
+
+    const limitLabel = limitType === "hourly" ? "hourly" : "daily";
   
     blockOverlay = document.createElement("div");
     blockOverlay.style.position = "fixed";
@@ -168,7 +261,7 @@ function getDomain(url) {
     blockOverlay.style.fontSize = "20px";
     blockOverlay.style.textAlign = "center";
     blockOverlay.innerHTML = `<div style="padding:20px;">
-        <p>You have reached your daily limit on ${domain}.</p>
+        <p>You have reached your ${limitLabel} limit on ${domain}.</p>
         <p>Click the button below 10 times in a row to reset the timer.</p>
         <button id="resetButton" style="font-size: 18px; padding: 10px 20px;">Reset Timer</button>
         <p id="clickCountText">Clicks: 0/10</p>
@@ -199,7 +292,7 @@ function getDomain(url) {
   
   chrome.runtime.onMessage.addListener((message) => {
     if (message.type === "block" && message.domain) {
-      createBlockOverlay(message.domain);
+      createBlockOverlay(message.domain, message.limitType);
     } else if (message.type === "unblock") {
       removeBlockOverlay();
     }
@@ -208,10 +301,7 @@ function getDomain(url) {
   // --- Initialize Countdown Overlay if on a limited site ---
   
   (function initTimerOverlay() {
-    const domain = getDomain(window.location.href);
-    // List of common social media sites; adjust as needed.
-    const limitedSites = ["facebook.com", "instagram.com", "x.com", "reddit.com", "youtube.com", "tiktok.com", "snapchat.com"];
-    if (limitedSites.includes(domain)) {
+    if (getDomain(window.location.href)) {
       createCountdownOverlay();
     }
   })();

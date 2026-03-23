@@ -19,13 +19,7 @@
     "content_scripts": [
       {
         "matches": [
-          "*://*.facebook.com/*",
-          "*://*.instagram.com/*",
-          "*://*.x.com/*",
-          "*://*.reddit.com/*",
-          "*://*.youtube.com/*",
-          "*://*.tiktok.com/*",
-          "*://*.snapchat.com/*"
+          "<all_urls>"
         ],
         "js": ["content.js"]
       }
